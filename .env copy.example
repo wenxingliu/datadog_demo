@@ -1,8 +1,0 @@
-LLM_PROVIDER=kimi
-KIMI_API_KEY=sk-your-kimi-key-here
-KIMI_MODEL=kimi-k2.6
-KIMI_BASE_URL=https://api.moonshot.ai/v1
-
-# Optional fallback if you switch LLM_PROVIDER=openai.
-OPENAI_API_KEY=sk-your-openai-key-here
-OPENAI_MODEL=gpt-5-mini
