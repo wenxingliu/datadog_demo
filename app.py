@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import uuid4
 
 import streamlit as st
 
 from tutor.config import load_settings, require_pdf
+from tutor.datadog_bootstrap import enable_llm_observability
 from tutor.llm_client import answer_question, ensure_vector_store
 from tutor.pdf_index import load_or_build_index, search_chunks
 from tutor.prompts import MODES
 
 
 st.set_page_config(page_title="Data Science Tutor", page_icon="DS", layout="wide")
+enable_llm_observability()
 
 
 @st.cache_resource(show_spinner=False)
@@ -19,6 +22,8 @@ def cached_index(pdf_path: str, index_path: str):
 
 
 def init_messages() -> None:
+    if "datadog_session_id" not in st.session_state:
+        st.session_state.datadog_session_id = str(uuid4())
     if "messages" not in st.session_state:
         st.session_state.messages = [
             {
@@ -98,6 +103,8 @@ if question:
                     mode=mode,
                     chunks=retrieved,
                     vector_store_id=st.session_state.vector_store_id,
+                    top_k=top_k,
+                    datadog_session_id=st.session_state.datadog_session_id,
                 )
             except Exception as exc:
                 answer = f"I could not call the model. Details: `{exc}`"

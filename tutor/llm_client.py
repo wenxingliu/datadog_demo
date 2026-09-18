@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import file_sha256
+from .observability import annotate_llm_output, extract_token_metrics, llm_span
 from .pdf_index import Chunk, format_context
 from .prompts import system_prompt, user_prompt
 
@@ -79,33 +80,55 @@ def answer_question(
     mode: str,
     chunks: list[Chunk],
     vector_store_id: str | None,
+    top_k: int,
+    datadog_session_id: str | None = None,
 ) -> str:
-    client = _make_client(api_key, base_url)
-    local_context = format_context(chunks)
-    if provider == "kimi":
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt(mode)},
-                {"role": "user", "content": user_prompt(question, local_context)},
-            ],
+    with llm_span(
+        model=model,
+        provider=provider,
+        question=question,
+        mode=mode,
+        retrieved_chunk_count=len(chunks),
+        top_k=top_k,
+        vector_store_enabled=bool(vector_store_id),
+        session_id=datadog_session_id,
+    ) as span:
+        client = _make_client(api_key, base_url)
+        local_context = format_context(chunks)
+        if provider == "kimi":
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt(mode)},
+                    {"role": "user", "content": user_prompt(question, local_context)},
+                ],
+            )
+            content = response.choices[0].message.content
+            answer = content or ""
+            annotate_llm_output(
+                span,
+                answer=answer,
+                token_metrics=extract_token_metrics(getattr(response, "usage", None)),
+            )
+            return answer
+
+        tools = []
+        if vector_store_id:
+            tools.append({"type": "file_search", "vector_store_ids": [vector_store_id]})
+
+        create_kwargs: dict[str, Any] = {
+            "model": model,
+            "instructions": system_prompt(mode),
+            "input": user_prompt(question, local_context),
+        }
+        if tools:
+            create_kwargs["tools"] = tools
+
+        response = client.responses.create(**create_kwargs)
+        answer = response.output_text
+        annotate_llm_output(
+            span,
+            answer=answer,
+            token_metrics=extract_token_metrics(getattr(response, "usage", None)),
         )
-        content = response.choices[0].message.content
-        if content is None:
-            return ""
-        return content
-
-    tools = []
-    if vector_store_id:
-        tools.append({"type": "file_search", "vector_store_ids": [vector_store_id]})
-
-    create_kwargs: dict[str, Any] = {
-        "model": model,
-        "instructions": system_prompt(mode),
-        "input": user_prompt(question, local_context),
-    }
-    if tools:
-        create_kwargs["tools"] = tools
-
-    response = client.responses.create(**create_kwargs)
-    return response.output_text
+        return answer
