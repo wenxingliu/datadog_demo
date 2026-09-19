@@ -6,7 +6,7 @@ Instrument the Streamlit tutor for Datadog LLM Observability. The app uses Datad
 
 Primary success criteria: each answered question creates a Datadog LLM span named `tutor.answer_question` with service/app tags, latency, errors, token metrics when available, Datadog session grouping, input/output capture when enabled, and safe app metadata.
 
-## Implemented Changes
+## Changes to be Implemented
 
 - Add `ddtrace` to `requirements.txt`.
 - Add Datadog local-dev variables to `.env.example` and `.env copy.example`.
